@@ -1,4 +1,4 @@
-name: Branch Protection Check
+name: Fetch Repository Rulesets
 
 on:
   push:
@@ -6,51 +6,38 @@ on:
       - main
   workflow_dispatch:
 
+permissions: read-all
+
 jobs:
-  branch-check:
-    permissions: write-all
+  ruleset-check:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Check branch protection settings
-        id: check_protection
+      - name: Get repository rulesets
+        id: get_rulesets
         uses: actions/github-script@v7
-        env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
-            // Remove the "refs/heads/" prefix to get the branch name
-            const branch = context.ref.replace('refs/heads/', '');
-            try {
-              // Attempt to fetch the branch protection settings
-              const { data } = await github.rest.repos.getBranchProtection({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                branch
-              });
-              core.info(`Branch "${branch}" is protected.`);
-              // Set an output flag for later steps
-              core.setOutput("protected", "true");
-              // Return the protection data (optional)
-              return data;
-            } catch (error) {
-              if (error.status === 404) {
-                core.info(`Branch "${branch}" is not protected.`);
-                core.setOutput("protected", "false");
-              } else {
-                core.setFailed(`Error fetching branch protection: ${error.message}`);
-              }
-            }
+            // Fetch all repository rulesets
+            const response = await github.request('GET /repos/{owner}/{repo}/rulesets', {
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            const rulesets = response.data;
+            core.info("Repository rulesets:");
+            core.info(JSON.stringify(rulesets, null, 2));
+            // Example: check if any ruleset targets branches
+            const branchRulesets = rulesets.filter(rs => rs.target === 'branch');
+            core.setOutput("branchRulesetCount", branchRulesets.length.toString());
+            // Optionally, return the full list if needed
+            return rulesets;
 
-      - name: Run step if branch is protected
-        if: steps.check_protection.outputs.protected == 'true'
-        run: echo "Proceeding with actions on a protected branch."
+      - name: Conditional step if branch rulesets exist
+        if: steps.get_rulesets.outputs.branchRulesetCount != '0'
+        run: echo "This repository has at least one branch ruleset configured."
 
-      - name: Run step if branch is not protected
-        if: steps.check_protection.outputs.protected == 'false'
-        run: echo "Branch is not protected – taking alternative action."
-
-      - name: Continue workflow
-        run: echo "This step runs regardless of branch protection status."
+      - name: Fallback step if no branch rulesets exist
+        if: steps.get_rulesets.outputs.branchRulesetCount == '0'
+        run: echo "No branch rulesets found; consider adding one via the UI or API."
