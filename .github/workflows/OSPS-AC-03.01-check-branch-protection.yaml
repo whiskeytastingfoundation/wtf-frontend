@@ -17,6 +17,8 @@ jobs:
       - name: Check branch protection settings
         id: check_protection
         uses: actions/github-script@v7
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           script: |
             // Remove the "refs/heads/" prefix to get the branch name
