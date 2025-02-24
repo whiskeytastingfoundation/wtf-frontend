@@ -1,0 +1,53 @@
+name: Branch Protection Check
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  branch-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Check branch protection settings
+        id: check_protection
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // Remove the "refs/heads/" prefix to get the branch name
+            const branch = context.ref.replace('refs/heads/', '');
+            try {
+              // Attempt to fetch the branch protection settings
+              const { data } = await github.rest.repos.getBranchProtection({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch
+              });
+              core.info(`Branch "${branch}" is protected.`);
+              // Set an output flag for later steps
+              core.setOutput("protected", "true");
+              // Return the protection data (optional)
+              return data;
+            } catch (error) {
+              if (error.status === 404) {
+                core.info(`Branch "${branch}" is not protected.`);
+                core.setOutput("protected", "false");
+              } else {
+                core.setFailed(`Error fetching branch protection: ${error.message}`);
+              }
+            }
+
+      - name: Run step if branch is protected
+        if: steps.check_protection.outputs.protected == 'true'
+        run: echo "Proceeding with actions on a protected branch."
+
+      - name: Run step if branch is not protected
+        if: steps.check_protection.outputs.protected == 'false'
+        run: echo "Branch is not protected – taking alternative action."
+
+      - name: Continue workflow
+        run: echo "This step runs regardless of branch protection status."
