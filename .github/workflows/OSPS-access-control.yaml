@@ -6,8 +6,8 @@ on:
   workflow_dispatch:      # Allow manual triggering
   push:
     branches: [ main ]
-    paths:
-      - '.github/workflows/osps-ac.yml'
+    #paths:
+    #  - '.github/workflows/osps-ac.yml'
 
 jobs:
   access-control-checks:

@@ -4,6 +4,8 @@ on:
   workflow_dispatch:      # Allow manual triggering
   schedule:
     - cron: '0 1 * * 0'   # Run weekly on Sunday at 1 AM (after individual checks)
+  push:
+    branches: [ main ]
   workflow_run:
     workflows:
       - "OSPS Access Control Checks"
