@@ -1,0 +1,274 @@
+name: OSPS Summary Report
+
+on:
+  workflow_dispatch:      # Allow manual triggering
+  schedule:
+    - cron: '0 1 * * 0'   # Run weekly on Sunday at 1 AM (after individual checks)
+  workflow_run:
+    workflows:
+      - "OSPS Access Control Checks"
+      - "OSPS Vulnerability Management Checks"
+      # Add other workflows here as you create them
+    types:
+      - completed
+
+jobs:
+  generate-summary:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+      checks: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup environment
+        run: |
+          # Install jq for JSON processing
+          sudo apt-get update && sudo apt-get install -y jq
+          mkdir -p attestations
+        shell: bash
+
+      - name: Download AC attestations
+        uses: actions/download-artifact@v3
+        with:
+          name: osps-ac-attestations
+          path: attestations/ac
+        continue-on-error: true
+
+      - name: Download VM attestations
+        uses: actions/download-artifact@v3
+        with:
+          name: osps-vm-attestations
+          path: attestations/vm
+        continue-on-error: true
+
+      # Add steps to download other category attestations as you create them
+
+      - name: Generate summary report
+        id: summary
+        run: |
+          #!/bin/bash
+          # Generate a summary report of all OSPS attestations
+
+          echo "Generating OSPS summary report..."
+
+          # Initialize counters
+          TOTAL_CONTROLS=0
+          PASSING_CONTROLS=0
+          FAILING_CONTROLS=0
+
+          # Get all attestation files
+          ATTESTATION_FILES=$(find attestations -name "*-attestation.json")
+
+          if [ -z "$ATTESTATION_FILES" ]; then
+              echo "No attestation files found"
+              echo "result=1" >> $GITHUB_OUTPUT
+              exit 1
+          fi
+
+          # Create a temporary directory for processing
+          mkdir -p tmp_summary
+
+          # Process attestations
+          for FILE in $ATTESTATION_FILES; do
+              # Extract control information
+              CONTROL=$(jq -r '.predicate.control' "$FILE")
+              TITLE=$(jq -r '.predicate.title' "$FILE")
+              RESULT=$(jq -r '.predicate.result' "$FILE")
+              
+              # Categorize by control family
+              CATEGORY=${CONTROL%-*}
+              
+              # Create category directory if it doesn't exist
+              mkdir -p "tmp_summary/${CATEGORY}"
+              
+              # Create a simplified control info file
+              echo "{\"control\":\"${CONTROL}\",\"title\":\"${TITLE}\",\"result\":\"${RESULT}\"}" > "tmp_summary/${CATEGORY}/${CONTROL}.json"
+              
+              # Update counters
+              TOTAL_CONTROLS=$((TOTAL_CONTROLS + 1))
+              if [ "$RESULT" = "pass" ]; then
+                  PASSING_CONTROLS=$((PASSING_CONTROLS + 1))
+              else
+                  FAILING_CONTROLS=$((FAILING_CONTROLS + 1))
+              fi
+          done
+
+          # Determine overall result
+          if [ $PASSING_CONTROLS -eq $TOTAL_CONTROLS ]; then
+              OVERALL_RESULT="pass"
+          else
+              OVERALL_RESULT="fail"
+          fi
+
+          # Create markdown report
+          cat > osps-summary-report.md << EOF
+          # OSPS Security Baseline Summary
+
+          Generated on: $(date -u +'%Y-%m-%d %H:%M:%S') UTC
+
+          ## Overall Result: $([ "$OVERALL_RESULT" = "pass" ] && echo "✅ PASS" || echo "❌ FAIL")
+
+          Total Controls Checked: ${TOTAL_CONTROLS}
+          Passing Controls: ${PASSING_CONTROLS}
+          Failing Controls: ${FAILING_CONTROLS}
+
+          EOF
+
+          # Add details for each category
+          for CATEGORY_DIR in tmp_summary/*; do
+              if [ -d "$CATEGORY_DIR" ]; then
+                  CATEGORY=$(basename "$CATEGORY_DIR")
+                  
+                  echo "## ${CATEGORY} Controls" >> osps-summary-report.md
+                  echo "" >> osps-summary-report.md
+                  echo "| Control | Title | Result |" >> osps-summary-report.md
+                  echo "|---------|-------|--------|" >> osps-summary-report.md
+                  
+                  # Sort control files by name
+                  for CONTROL_FILE in $(find "$CATEGORY_DIR" -name "*.json" | sort); do
+                      CONTROL=$(jq -r '.control' "$CONTROL_FILE")
+                      TITLE=$(jq -r '.title' "$CONTROL_FILE")
+                      RESULT=$(jq -r '.result' "$CONTROL_FILE")
+                      
+                      RESULT_ICON=$([ "$RESULT" = "pass" ] && echo "✅" || echo "❌")
+                      
+                      echo "| ${CONTROL} | ${TITLE} | ${RESULT_ICON} |" >> osps-summary-report.md
+                  done
+                  
+                  echo "" >> osps-summary-report.md
+              fi
+          done
+
+          # Create JSON summary
+          cat > osps-summary-report.json << EOF
+          {
+            "generated_at": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+            "overall_result": "${OVERALL_RESULT}",
+            "total_controls": ${TOTAL_CONTROLS},
+            "passing_controls": ${PASSING_CONTROLS},
+            "failing_controls": ${FAILING_CONTROLS},
+            "categories": {
+          EOF
+
+          # Add category details to JSON
+          FIRST_CATEGORY=1
+          for CATEGORY_DIR in tmp_summary/*; do
+              if [ -d "$CATEGORY_DIR" ]; then
+                  CATEGORY=$(basename "$CATEGORY_DIR")
+                  
+                  # Add comma if not the first category
+                  if [ $FIRST_CATEGORY -eq 0 ]; then
+                      echo "," >> osps-summary-report.json
+                  else
+                      FIRST_CATEGORY=0
+                  fi
+                  
+                  # Get controls for this category
+                  CONTROLS=$(find "$CATEGORY_DIR" -name "*.json" | xargs -I{} jq -r '.control' {} | tr '\n' ',' | sed 's/,$//')
+                  
+                  echo "    \"${CATEGORY}\": [${CONTROLS}]" >> osps-summary-report.json
+              fi
+          done
+
+          # Close the categories object and add report markdown to the JSON
+          REPORT_MD=$(cat osps-summary-report.md | sed 's/"/\\"/g' | tr '\n' ' ' | sed 's/ $//')
+          cat >> osps-summary-report.json << EOF
+            },
+            "report_markdown": "${REPORT_MD}"
+          }
+          EOF
+
+          # Clean up temporary files
+          rm -rf tmp_summary
+
+          echo "Summary report generated successfully"
+          cat osps-summary-report.md
+
+          # Return exit code based on overall result
+          if [ "$OVERALL_RESULT" = "pass" ]; then
+              echo "result=0" >> $GITHUB_OUTPUT
+              exit 0
+          else
+              echo "result=1" >> $GITHUB_OUTPUT
+              exit 1
+          fi
+        shell: bash
+
+      - name: Create summary check
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const summaryPath = 'osps-summary-report.json';
+            
+            if (!fs.existsSync(summaryPath)) {
+              console.log('Summary report file not found');
+              return;
+            }
+            
+            const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+            
+            const conclusion = summary.overall_result === 'pass' ? 'success' : 'failure';
+            
+            // Create a new check run
+            const check = await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'OSPS Security Baseline Summary',
+              head_sha: context.sha,
+              status: 'completed',
+              conclusion: conclusion,
+              output: {
+                title: 'OSPS Security Baseline Summary',
+                summary: `Overall Result: ${summary.overall_result}`,
+                text: summary.report_markdown
+              }
+            });
+            
+            console.log(`Created check run with ID ${check.data.id}`);
+
+      - name: Upload summary report
+        uses: actions/upload-artifact@v3
+        with:
+          name: osps-summary-report
+          path: |
+            osps-summary-report.json
+            osps-summary-report.md
+          retention-days: 90
+
+      - name: Generate combined attestation
+        run: |
+          RESULT=${{ steps.summary.outputs.result }}
+          RESULT_TEXT=$([ "$RESULT" == "0" ] && echo "pass" || echo "fail")
+          
+          cat > osps-summary-attestation.json << EOF
+          {
+            "subject": {
+              "name": "OSPS-Summary",
+              "digest": {
+                "sha256": "${{ github.sha }}"
+              }
+            },
+            "predicate": {
+              "type": "https://github.com/osps/attestation/v1",
+              "control": "OSPS-Summary",
+              "title": "OSPS Security Baseline Summary",
+              "result": "$RESULT_TEXT",
+              "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+              "url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+          }
+          EOF
+        shell: bash
+
+      - name: Upload summary attestation
+        uses: actions/upload-artifact@v3
+        with:
+          name: osps-summary-attestation
+          path: osps-summary-attestation.json
+          retention-days: 90

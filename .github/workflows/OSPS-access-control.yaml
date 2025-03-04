@@ -1,0 +1,324 @@
+name: OSPS Access Control Checks
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Run weekly on Sunday at midnight
+  workflow_dispatch:      # Allow manual triggering
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/osps-ac.yml'
+
+jobs:
+  access-control-checks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Needed for attestation signing
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up GitHub CLI
+        run: |
+          gh --version || (
+            type -p curl >/dev/null || sudo apt install curl -y
+            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+            && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+            && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+            && sudo apt update \
+            && sudo apt install gh -y
+          )
+        shell: bash
+
+      - name: Setup attestation tools
+        run: |
+          mkdir -p attestations
+          # Install jq for JSON processing
+          sudo apt-get update && sudo apt-get install -y jq
+        shell: bash
+
+      - name: Check MFA Requirement (OSPS-AC-01)
+        id: ac-01-check
+        run: |
+          #!/bin/bash
+          # Check if the project's organization requires multi-factor authentication
+
+          echo "Checking if MFA is required for organization..."
+
+          # Extract organization name from repository
+          REPO_NAME=${GITHUB_REPOSITORY}
+          ORG_NAME=${REPO_NAME%%/*}
+
+          # Use GitHub CLI to check if the organization requires two-factor authentication
+          ORG_DATA=$(gh api "orgs/${ORG_NAME}" --jq '.two_factor_requirement_enabled')
+
+          if [ "$ORG_DATA" = "true" ]; then
+              echo "✅ MFA is required for organization ${ORG_NAME}"
+              echo "result=0" >> $GITHUB_OUTPUT
+              exit 0
+          else
+              echo "❌ MFA is not required for organization ${ORG_NAME}"
+              echo "result=1" >> $GITHUB_OUTPUT
+              exit 1
+          fi
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate attestation for AC-01
+        run: |
+          RESULT=${{ steps.ac-01-check.outputs.result }}
+          RESULT_TEXT=$([ "$RESULT" == "0" ] && echo "pass" || echo "fail")
+          
+          cat > attestations/osps-ac-01-attestation.json << EOF
+          {
+            "subject": {
+              "name": "OSPS-AC-01",
+              "digest": {
+                "sha256": "${{ github.sha }}"
+              }
+            },
+            "predicate": {
+              "type": "https://github.com/osps/attestation/v1",
+              "control": "OSPS-AC-01",
+              "title": "The project's version control system MUST require multi-factor authentication for collaborators modifying the project repository settings or accessing sensitive data.",
+              "result": "$RESULT_TEXT",
+              "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+              "url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+          }
+          EOF
+        shell: bash
+      
+      - name: Check Default Permissions (OSPS-AC-02)
+        id: ac-02-check
+        run: |
+          #!/bin/bash
+          # Check if the repository restricts collaborator permissions to lowest privileges by default
+
+          echo "Checking default repository permissions..."
+
+          # Use GitHub CLI to get the repository settings
+          REPO_SETTINGS=$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.default_repository_permission')
+
+          if [ -z "$REPO_SETTINGS" ]; then
+              echo "Error: Could not retrieve repository settings"
+              echo "result=1" >> $GITHUB_OUTPUT
+              exit 1
+          fi
+
+          # In GitHub, the lowest permission levels are 'read' or 'none'
+          if [ "$REPO_SETTINGS" = "read" ] || [ "$REPO_SETTINGS" = "none" ]; then
+              echo "✅ Default repository permissions are restricted to lowest privileges (${REPO_SETTINGS})"
+              echo "result=0" >> $GITHUB_OUTPUT
+              exit 0
+          else
+              echo "❌ Default repository permissions are set to '${REPO_SETTINGS}', not the lowest available"
+              echo "result=1" >> $GITHUB_OUTPUT
+              exit 1
+          fi
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate attestation for AC-02
+        run: |
+          RESULT=${{ steps.ac-02-check.outputs.result }}
+          RESULT_TEXT=$([ "$RESULT" == "0" ] && echo "pass" || echo "fail")
+          
+          cat > attestations/osps-ac-02-attestation.json << EOF
+          {
+            "subject": {
+              "name": "OSPS-AC-02",
+              "digest": {
+                "sha256": "${{ github.sha }}"
+              }
+            },
+            "predicate": {
+              "type": "https://github.com/osps/attestation/v1",
+              "control": "OSPS-AC-02",
+              "title": "The project's version control system MUST restrict collaborator permissions to the lowest available privileges by default.",
+              "result": "$RESULT_TEXT",
+              "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+              "url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+          }
+          EOF
+        shell: bash
+
+      - name: Check Branch Protection (OSPS-AC-03)
+        id: ac-03-check
+        run: |
+          #!/bin/bash
+          # Check if the primary branch is protected from unintentional modification
+
+          echo "Checking branch protection for the primary branch..."
+
+          # Get repository details to find the default branch
+          REPO_INFO=$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.default_branch')
+          DEFAULT_BRANCH=$REPO_INFO
+
+          echo "Primary branch: ${DEFAULT_BRANCH}"
+
+          # Check branch protection status
+          # Note: This requires admin access to the repository
+          PROTECTION_INFO=$(gh api "repos/${GITHUB_REPOSITORY}/branches/${DEFAULT_BRANCH}/protection" 2>/dev/null)
+          if [ $? -ne 0 ]; then
+              echo "❌ Could not check branch protection status (may require admin permissions)"
+              
+              # Alternative check: Try to get branch info to see if it's marked as protected
+              BRANCH_INFO=$(gh api "repos/${GITHUB_REPOSITORY}/branches/${DEFAULT_BRANCH}" --jq '.protected')
+              if [ "$BRANCH_INFO" = "true" ]; then
+                  echo "✅ The primary branch is marked as protected, but could not verify specific protections"
+                  echo "result=0" >> $GITHUB_OUTPUT
+                  exit 0
+              else
+                  echo "❌ The primary branch does not appear to be protected"
+                  echo "result=1" >> $GITHUB_OUTPUT
+                  exit 1
+              fi
+          fi
+
+          # If we got here, we have detailed protection info - check for required reviews or status checks
+          if echo "$PROTECTION_INFO" | grep -q "required_pull_request_reviews\|required_status_checks"; then
+              echo "✅ Primary branch '${DEFAULT_BRANCH}' is protected from unintentional modification"
+              echo "result=0" >> $GITHUB_OUTPUT
+              exit 0
+          else
+              echo "❌ Primary branch '${DEFAULT_BRANCH}' protection does not prevent direct pushes"
+              echo "result=1" >> $GITHUB_OUTPUT
+              exit 1
+          fi
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate attestation for AC-03
+        run: |
+          RESULT=${{ steps.ac-03-check.outputs.result }}
+          RESULT_TEXT=$([ "$RESULT" == "0" ] && echo "pass" || echo "fail")
+          
+          cat > attestations/osps-ac-03-attestation.json << EOF
+          {
+            "subject": {
+              "name": "OSPS-AC-03",
+              "digest": {
+                "sha256": "${{ github.sha }}"
+              }
+            },
+            "predicate": {
+              "type": "https://github.com/osps/attestation/v1",
+              "control": "OSPS-AC-03",
+              "title": "The project's version control system MUST prevent unintentional modification of the primary branch.",
+              "result": "$RESULT_TEXT",
+              "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+              "url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+          }
+          EOF
+        shell: bash
+      
+      - name: Check CI/CD Permissions (OSPS-AC-04)
+        id: ac-04-check
+        run: |
+          #!/bin/bash
+          # Check if the CI/CD pipelines follow the principle of least privilege
+
+          echo "Checking CI/CD pipeline permissions..."
+
+          # Look for workflow files in the repository
+          WORKFLOW_DIR=".github/workflows"
+          if [ ! -d "$WORKFLOW_DIR" ]; then
+              echo "❌ No workflows directory found at ${WORKFLOW_DIR}"
+              echo "result=1" >> $GITHUB_OUTPUT
+              exit 1
+          fi
+
+          WORKFLOW_FILES=$(find "$WORKFLOW_DIR" -name "*.yml" -o -name "*.yaml")
+          if [ -z "$WORKFLOW_FILES" ]; then
+              echo "❌ No workflow files found in ${WORKFLOW_DIR}"
+              echo "result=1" >> $GITHUB_OUTPUT
+              exit 1
+          fi
+
+          ISSUES_FOUND=0
+
+          # Check each workflow file for permissions
+          for WF_FILE in $WORKFLOW_FILES; do
+              echo "Checking workflow file: ${WF_FILE}"
+              
+              # Look for excessive permissions
+              if grep -q "permissions:.*write-all" "$WF_FILE"; then
+                  echo "❌ Workflow ${WF_FILE} has excessive 'write-all' permissions"
+                  ISSUES_FOUND=1
+              fi
+              
+              # Look for self-hosted runners (which could be a risk)
+              if grep -q "runs-on:.*self-hosted" "$WF_FILE"; then
+                  echo "⚠️ Workflow ${WF_FILE} uses self-hosted runners which may have elevated permissions"
+              fi
+              
+              # Check for job-level permissions
+              JOB_WRITE_ALL=$(grep -A5 "jobs:" "$WF_FILE" | grep -A5 ".*:" | grep -A10 "permissions:" | grep "write-all")
+              if [ ! -z "$JOB_WRITE_ALL" ]; then
+                  echo "❌ Jobs in ${WF_FILE} have excessive 'write-all' permissions"
+                  ISSUES_FOUND=1
+              fi
+          done
+
+          # Check repository-level workflow permissions
+          REPO_WORKFLOW_PERMISSIONS=$(gh api "repos/${GITHUB_REPOSITORY}/actions/permissions" --jq '.default_workflow_permissions')
+
+          if [ "$REPO_WORKFLOW_PERMISSIONS" = "write" ]; then
+              echo "❌ Default workflow permissions for the repository are set to 'write'"
+              ISSUES_FOUND=1
+          else
+              echo "✅ Default workflow permissions for the repository are set to '${REPO_WORKFLOW_PERMISSIONS}'"
+          fi
+
+          if [ $ISSUES_FOUND -eq 0 ]; then
+              echo "✅ All workflows follow the principle of least privilege"
+              echo "result=0" >> $GITHUB_OUTPUT
+              exit 0
+          else
+              echo "❌ Some workflows don't follow the principle of least privilege"
+              echo "result=1" >> $GITHUB_OUTPUT
+              exit 1
+          fi
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate attestation for AC-04
+        run: |
+          RESULT=${{ steps.ac-04-check.outputs.result }}
+          RESULT_TEXT=$([ "$RESULT" == "0" ] && echo "pass" || echo "fail")
+          
+          cat > attestations/osps-ac-04-attestation.json << EOF
+          {
+            "subject": {
+              "name": "OSPS-AC-04",
+              "digest": {
+                "sha256": "${{ github.sha }}"
+              }
+            },
+            "predicate": {
+              "type": "https://github.com/osps/attestation/v1",
+              "control": "OSPS-AC-04",
+              "title": "The project's permissions in CI/CD pipelines MUST follow the principle of least privilege.",
+              "result": "$RESULT_TEXT",
+              "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+              "url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+          }
+          EOF
+        shell: bash
+      
+      - name: Upload attestations
+        uses: actions/upload-artifact@v3
+        with:
+          name: osps-ac-attestations
+          path: attestations/
+          retention-days: 90
