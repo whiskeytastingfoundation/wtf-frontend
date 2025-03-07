@@ -317,7 +317,7 @@ jobs:
         shell: bash
       
       - name: Upload attestations
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: osps-ac-attestations
           path: attestations/
