@@ -8,53 +8,12 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
-# Principle of least privilege - only needs read access to check commits
-permissions:
-  contents: read
-  pull-requests: read
-
 jobs:
   dco:
     name: DCO Sign-off Check
     runs-on: ubuntu-latest
     steps:
-      - name: Check out code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Check DCO
+        uses: dcoapp/pr-dco-check-action@v1
         with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
-
-      - name: Check DCO sign-off
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          echo "Checking commits from $BASE_SHA to $HEAD_SHA for DCO sign-off..."
-
-          missing_signoff=()
-
-          for commit in $(git rev-list "$BASE_SHA".."$HEAD_SHA"); do
-            message=$(git log -1 --format=%B "$commit")
-            if ! echo "$message" | grep -qE "^Signed-off-by: .+ <.+>"; then
-              short_sha=$(git rev-parse --short "$commit")
-              subject=$(git log -1 --format=%s "$commit")
-              missing_signoff+=("$short_sha: $subject")
-            fi
-          done
-
-          if [ ${#missing_signoff[@]} -gt 0 ]; then
-            echo "❌ The following commits are missing DCO sign-off:"
-            echo ""
-            for commit in "${missing_signoff[@]}"; do
-              echo "  - $commit"
-            done
-            echo ""
-            echo "Please sign off your commits using: git commit -s"
-            echo "Or amend existing commits: git rebase HEAD~N --signoff"
-            echo ""
-            echo "See: https://developercertificate.org/"
-            exit 1
-          fi
-
-          echo "✅ All commits have DCO sign-off"
+          require-signoff: true
