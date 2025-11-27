@@ -29,6 +29,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -148,48 +149,49 @@ jobs:
         if: steps.apply_updates.outputs.changes_made == 'true' && (github.event.inputs.create_pr == 'true' || github.event_name == 'schedule')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATE_SUMMARY: ${{ steps.summary.outputs.summary }}
         run: |
           # Configure git
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
+
           # Create a branch
           BRANCH_NAME="kusari-updates-$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$BRANCH_NAME"
-          
+
           # Commit changes
           git add package.json package-lock.json
           git commit -m "chore: apply Kusari security updates" \
             -m "Automated dependency updates based on Kusari security scan" \
-            -m "${{ steps.summary.outputs.summary }}"
-          
+            -m "$UPDATE_SUMMARY"
+
           # Push branch
           git push origin "$BRANCH_NAME"
-          
+
           # Create PR
           PR_BODY=$(cat <<EOF
           ## 🔐 Automated Security Updates from Kusari
-          
+
           This PR contains dependency updates identified by Kusari's security scan.
-          
+
           ### 📋 Summary
-          ${{ steps.summary.outputs.summary }}
-          
+          $UPDATE_SUMMARY
+
           ### 🔍 Review Checklist
           - [ ] Review the dependency changes in \`package.json\`
           - [ ] Verify that tests pass with the updated dependencies
           - [ ] Check for any breaking changes in the updated packages
           - [ ] Review the [Kusari analysis details](kusari_output.txt) if needed
-          
+
           ### 🤖 Automation
           This PR was automatically created by the Kusari dependency update workflow.
           It runs weekly to keep dependencies secure and up-to-date.
-          
+
           ---
           *Generated on $(date -u +"%Y-%m-%d %H:%M UTC")*
           EOF
           )
-          
+
           gh pr create \
             --title "🔐 Security: Apply Kusari dependency updates" \
             --body "$PR_BODY" \
@@ -200,17 +202,18 @@ jobs:
         if: steps.apply_updates.outputs.changes_made == 'true' && github.event.inputs.create_pr == 'false' && github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATE_SUMMARY: ${{ steps.summary.outputs.summary }}
         run: |
           # Configure git
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
+
           # Commit and push to main
           git add package.json package-lock.json
           git commit -m "chore: apply Kusari security updates" \
             -m "Automated dependency updates based on Kusari security scan" \
-            -m "${{ steps.summary.outputs.summary }}"
-          
+            -m "$UPDATE_SUMMARY"
+
           git push origin main
 
       - name: Upload Kusari Report
@@ -223,17 +226,22 @@ jobs:
 
       - name: Job Summary
         if: always()
+        env:
+          HAS_UPDATES: ${{ steps.kusari_scan.outputs.has_updates }}
+          UPDATE_COUNT: ${{ steps.kusari_scan.outputs.update_count }}
+          CHANGES_MADE: ${{ steps.apply_updates.outputs.changes_made }}
+          UPDATE_SUMMARY: ${{ steps.summary.outputs.summary }}
         run: |
           echo "## Kusari Dependency Update Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "${{ steps.kusari_scan.outputs.has_updates }}" == "true" ]; then
-            echo "✅ **Updates Found:** ${{ steps.kusari_scan.outputs.update_count }} dependencies need updating" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$HAS_UPDATES" == "true" ]; then
+            echo "✅ **Updates Found:** $UPDATE_COUNT dependencies need updating" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            
-            if [ "${{ steps.apply_updates.outputs.changes_made }}" == "true" ]; then
+
+            if [ "$CHANGES_MADE" == "true" ]; then
               echo "### Changes Applied:" >> $GITHUB_STEP_SUMMARY
-              echo "${{ steps.summary.outputs.summary }}" >> $GITHUB_STEP_SUMMARY
+              echo "$UPDATE_SUMMARY" >> $GITHUB_STEP_SUMMARY
             else
               echo "⚠️ No changes were needed in package.json (updates may be transitive dependencies)" >> $GITHUB_STEP_SUMMARY
             fi
