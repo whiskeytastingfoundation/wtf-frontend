@@ -151,6 +151,31 @@ Before submitting your pull request, please verify:
 - [ ] New and existing unit tests pass locally with my changes
 - [ ] Any dependent changes have been merged and published
 
+
+## Testing
+
+This project uses your test framework for testing.
+
+### Running Tests
+
+```bash
+# Add your test command here
+```
+
+### Writing Tests
+
+When contributing new features or fixing bugs:
+
+1. **Write tests first** (TDD) or alongside your changes
+2. **Ensure all tests pass** before submitting a PR
+3. **Maintain or improve coverage** - don't reduce test coverage
+4. **Test edge cases** - include tests for error conditions and boundary cases
+
+### Test Organization
+
+- Add your test file locations here
+- Describe the test file naming convention
+
 ---
 
 Thank you for contributing! 🙏

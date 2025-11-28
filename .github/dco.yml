@@ -1,0 +1,10 @@
+# DCO (Developer Certificate of Origin) Configuration
+# This project uses the DCO GitHub App: https://github.com/apps/dco
+#
+# All commits must include a Signed-off-by line:
+#   git commit -s -m "Your message"
+#
+# See CONTRIBUTING.md for details.
+
+require:
+  members: true  # Require DCO from org members too

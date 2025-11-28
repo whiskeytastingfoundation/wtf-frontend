@@ -52,3 +52,121 @@ Security updates will be released as patch versions and announced via:
 ## Preferred Languages
 
 We prefer all communications to be in English.
+
+## Dependency Vulnerability Policy (SCA)
+
+We use automated Software Composition Analysis (SCA) to identify vulnerabilities in dependencies.
+
+### Remediation Timeline
+
+| Severity | Remediation SLA |
+|----------|-----------------|
+| Critical | 24 hours |
+| High | 7 days |
+| Medium | 30 days |
+| Low | 90 days or next release |
+
+### Process
+
+1. **Detection**: Dependabot and dependency-review action scan for vulnerabilities
+2. **Triage**: Security team assesses exploitability and impact
+3. **Remediation**: Update dependency or apply workaround
+4. **Verification**: Confirm fix resolves the vulnerability
+5. **Disclosure**: Follow coordinated disclosure if applicable
+
+### Exceptions
+
+Exceptions require documented justification and compensating controls.
+Track exceptions in [GitHub Issues](https://github.com/whiskeytastingfoundation/wtf-frontend/issues?q=label%3Asecurity-exception).
+
+
+## Static Analysis Policy (SAST)
+
+We use CodeQL and other static analysis tools to identify security issues in code.
+
+### Remediation Timeline
+
+| Severity | Remediation SLA |
+|----------|-----------------|
+| Critical/High | Must fix before merge |
+| Medium | 14 days |
+| Low | 30 days |
+
+### Process
+
+1. **Detection**: CodeQL runs on all PRs and weekly scans
+2. **Review**: Developers review findings in PR checks
+3. **Fix**: Address issues before merging or document exception
+4. **Verification**: Re-run analysis to confirm fix
+
+### Suppression Policy
+
+False positives may be suppressed with:
+- Inline comments explaining why it's safe
+- Issue tracking the suppression decision
+- Periodic review of suppressions
+
+## Secrets Management Policy
+
+### Overview
+
+This document describes how secrets are managed in the wtf-frontend project.
+
+### Secret Types
+
+| Type | Storage | Rotation |
+|------|---------|----------|
+| API Keys | GitHub Secrets | 90 days |
+| Database Credentials | GitHub Secrets | 90 days |
+| Signing Keys | Secure vault | Annually |
+| Service Accounts | Cloud IAM | 90 days |
+
+### Storage Guidelines
+
+**DO:**
+- ✅ Use GitHub Secrets for CI/CD credentials
+- ✅ Use environment-specific secrets (dev, staging, prod)
+- ✅ Use OIDC for cloud authentication when possible
+- ✅ Rotate secrets regularly per the schedule above
+
+**DON'T:**
+- ❌ Commit secrets to the repository
+- ❌ Log secrets in CI output
+- ❌ Share secrets in issues, PRs, or comments
+- ❌ Use the same secret across environments
+
+### Secret Rotation Procedure
+
+1. Generate new secret value
+2. Update in GitHub Secrets / vault
+3. Deploy to verify new secret works
+4. Revoke old secret
+5. Document rotation in security log
+
+### Compromised Secret Response
+
+If a secret is exposed:
+
+1. **Immediately** rotate the compromised secret
+2. **Review** access logs for unauthorized use
+3. **Scan** git history with tools like `trufflehog` or `gitleaks`
+4. **Report** the incident per security policy
+5. **Document** in post-incident review
+
+### Detection & Prevention
+
+We use the following tools to prevent secret exposure:
+
+- **GitHub Push Protection**: Blocks commits containing secrets
+- **Pre-commit hooks**: Local scanning before commit
+- **CI scanning**: `gitleaks` or `trufflehog` in pipeline
+- **.gitignore**: Excludes common secret file patterns
+
+### GitHub Secrets Configuration
+
+Repository secrets: `https://github.com/whiskeytastingfoundation/wtf-frontend/settings/secrets/actions`
+
+Required secrets for CI/CD:
+- Document required secrets in `.github/workflows/README.md`
+- Use descriptive names: `PROD_API_KEY`, `STAGING_DB_PASSWORD`
+
