@@ -85,17 +85,17 @@ The best ways to reach us with questions are:
 6. **Wait for review** - A maintainer will review your PR. Please be patient
    and responsive to feedback.
 
-### Sign Your Commits
+### Sign Your Commits (Required)
 
-Licensing is important to open source projects. It provides some assurances that
-the software will continue to be available based under the terms that the
-author(s) desired. We require that contributors sign off on commits submitted to
-our project's repositories. The [Developer Certificate of Origin
-(DCO)](https://probot.github.io/apps/dco/) is a way to certify that you wrote and
-have the right to contribute the code you are submitting to the project.
+We use the [Developer Certificate of Origin (DCO)](https://developercertificate.org/)
+to certify that contributors have the right to submit code under this project's license.
 
-You sign-off by adding the following to your commit messages. Your sign-off must
-match the git user and email associated with the commit.
+**⚠️ All commits must be signed off. This is enforced automatically on all pull requests.**
+
+#### How to Sign Off
+
+Add a `Signed-off-by` line to your commit message. Your sign-off must match the
+git user and email associated with the commit:
 
 ```
 This is my commit message
@@ -109,12 +109,32 @@ Git has a `-s` command line option to do this automatically:
 git commit -s -m 'This is my commit message'
 ```
 
-If you forgot to do this and have not yet pushed your changes to the remote
-repository, you can amend your commit with the sign-off by running:
+#### Fixing Unsigned Commits
+
+If you forgot to sign off and haven't pushed yet:
+
+```bash
+# Amend the last commit
+git commit --amend -s
+
+# Or sign off multiple commits via rebase
+git rebase HEAD~N --signoff
+```
+
+If you've already pushed, you'll need to amend and force push:
 
 ```bash
 git commit --amend -s
+git push --force-with-lease
 ```
+
+#### What the DCO Means
+
+By signing off, you certify the following (from [developercertificate.org](https://developercertificate.org/)):
+
+> I certify that I have the right to submit this contribution under the open source
+> license indicated in the file, and that I created this contribution (or have
+> permission to submit it on behalf of the original author).
 
 ## Pull Request Checklist
 
