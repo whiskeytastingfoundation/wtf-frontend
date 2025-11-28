@@ -87,10 +87,12 @@ The best ways to reach us with questions are:
 
 ### Sign Your Commits (Required)
 
+<!-- DCO: enabled via https://github.com/apps/dco -->
+
 We use the [Developer Certificate of Origin (DCO)](https://developercertificate.org/)
 to certify that contributors have the right to submit code under this project's license.
 
-**⚠️ All commits must be signed off. This is enforced automatically on all pull requests.**
+**⚠️ All commits must be signed off. This is enforced via the [DCO GitHub App](https://github.com/apps/dco) on all pull requests.**
 
 #### How to Sign Off
 

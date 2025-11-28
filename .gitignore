@@ -22,3 +22,64 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.template
+.envrc
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+
+# Credentials and tokens
+credentials.json
+credentials.yaml
+credentials.yml
+secrets.json
+secrets.yaml
+secrets.yml
+*.credentials
+*.secret
+token.json
+tokens.json
+
+# Cloud provider configs
+.aws/credentials
+.gcp/credentials.json
+serviceAccountKey.json
+service-account*.json
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# IDE and local configs
+.idea/
+.vscode/settings.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS
+Thumbs.db
+Desktop.ini
