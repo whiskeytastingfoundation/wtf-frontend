@@ -74,6 +74,20 @@ We use automated Software Composition Analysis (SCA) to identify vulnerabilities
 4. **Verification**: Confirm fix resolves the vulnerability
 5. **Disclosure**: Follow coordinated disclosure if applicable
 
+### Vulnerability Exploitability (VEX)
+
+When a vulnerability is determined to not impact this project, we will publish a VEX (Vulnerability Exploitability eXchange) statement documenting:
+
+- **CVE/Advisory ID**: The vulnerability identifier
+- **Status**: `not_affected`, `affected`, `fixed`, or `under_investigation`
+- **Justification**: Why the vulnerability does not impact us (e.g., `vulnerable_code_not_present`, `vulnerable_code_not_in_execute_path`, `inline_mitigations_already_exist`)
+- **Impact Statement**: Explanation of our analysis
+
+VEX statements will be published as:
+- GitHub Security Advisory (for significant vulnerabilities)
+- Comments on Dependabot PRs (for dependency vulnerabilities)
+- Release notes (when applicable)
+
 ### Exceptions
 
 Exceptions require documented justification and compensating controls.
