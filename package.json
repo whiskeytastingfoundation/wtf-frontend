@@ -13,7 +13,7 @@
     "@headlessui/vue": "^1.7.22",
     "@popperjs/core": "^2.11.8",
     "@tailwindcss/aspect-ratio": "^0.4.2",
-    "@tailwindcss/forms": "^0.5.7",
+    "@tailwindcss/forms": "^0.5.10",
     "@tailwindcss/typography": "^0.5.13",
     "@yaireo/tagify": "^4.26.5",
     "vue": "^3.4.20"
