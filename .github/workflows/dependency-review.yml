@@ -1,0 +1,36 @@
+# Dependency Review - SCA for Pull Requests
+# Addresses OSPS-VM-05.02: Pre-release SCA policy
+
+name: 'Dependency Review'
+
+on:
+  pull_request:
+    branches: [ "main", "master" ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          # Fail on high and critical vulnerabilities
+          fail-on-severity: high
+
+          # Also check for license issues (optional)
+          # deny-licenses: GPL-3.0, AGPL-3.0
+
+          # Comment on PR with findings
+          comment-summary-in-pr: always
+
+          # Warn about packages with no license
+          warn-on-openssf-scorecard-level: 3

@@ -1,170 +1,260 @@
-# Threat Model
+# Threat Model: Whiskey Tasting Foundation Frontend
 
-## Overview
-
-This document describes the threat model for wtf-frontend.
-
-**Last Updated:** [Date]
+**Generated:** 2025-11-30
 **Methodology:** STRIDE
-**Scope:** [Define scope - entire system, specific component, etc.]
+**Repository:** whiskeytastingfoundation/wtf-frontend
+**Application Type:** Vue.js Single Page Application (SPA)
 
-## System Description
+## Executive Summary
 
-<!-- Brief description of what the system does and its security boundaries -->
+| Risk Level | Count |
+|------------|-------|
+| 🔴 Critical | 0 |
+| 🟠 High | 1 |
+| 🟡 Medium | 3 |
+| 🟢 Low | 2 |
 
-### Assets
+This threat model analyzes the Whiskey Tasting Foundation frontend application, a Vue.js SPA that allows users to create and manage whiskey tasting notes. The application uses browser localStorage for data persistence.
 
-| Asset | Description | Sensitivity |
-|-------|-------------|-------------|
-| User data | PII, credentials | Critical |
-| API keys | Service authentication | High |
-| Configuration | System settings | Medium |
-| Logs | Audit trail | Medium |
+## System Overview
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    User Browser                          │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │              Vue.js SPA                          │    │
+│  │  ┌──────────────┐  ┌──────────────┐             │    │
+│  │  │ WhiskeyForm  │  │ NoteSummary  │             │    │
+│  │  └──────────────┘  └──────────────┘             │    │
+│  │  ┌──────────────┐                               │    │
+│  │  │ NoteDetail   │                               │    │
+│  │  └──────────────┘                               │    │
+│  │           │                                      │    │
+│  │           ▼                                      │    │
+│  │  ┌──────────────────────┐                       │    │
+│  │  │   localStorage       │                       │    │
+│  │  │   (submissions)      │                       │    │
+│  │  └──────────────────────┘                       │    │
+│  └─────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────────────────────────────┐
+│              GitHub Pages (Static Hosting)               │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Assets Inventory
+
+| Asset | Type | Sensitivity | Location |
+|-------|------|-------------|----------|
+| Whiskey tasting notes | User data | Low | localStorage |
+| Application source code | Code | Public | GitHub |
+| Static assets (JS/CSS) | Code | Public | GitHub Pages |
+| User preferences | User data | Low | localStorage |
 
 ### Trust Boundaries
 
-```
-┌─────────────────────────────────────────────────────┐
-│                    Internet                          │
-│  ┌───────────────────────────────────────────────┐  │
-│  │              Public Zone                       │  │
-│  │  ┌─────────┐                                  │  │
-│  │  │   CDN   │                                  │  │
-│  │  └────┬────┘                                  │  │
-│  │       │                                       │  │
-│  │  ═════╪═══════ Trust Boundary 1 ══════════   │  │
-│  │       │                                       │  │
-│  │  ┌────▼────┐     DMZ                         │  │
-│  │  │   LB    │                                  │  │
-│  │  └────┬────┘                                  │  │
-│  │       │                                       │  │
-│  │  ═════╪═══════ Trust Boundary 2 ══════════   │  │
-│  │       │                                       │  │
-│  │  ┌────▼────┐     Private Zone                │  │
-│  │  │   App   │──────┐                          │  │
-│  │  └─────────┘      │                          │  │
-│  │              ┌────▼────┐                      │  │
-│  │              │   DB    │                      │  │
-│  │              └─────────┘                      │  │
-│  └───────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────┘
-```
+1. **Browser ↔ GitHub Pages**: HTTPS-protected static asset delivery
+2. **Application ↔ localStorage**: Same-origin browser storage
+3. **User ↔ Application**: Client-side input handling
 
-## Threat Actors
+## Threat Analysis (STRIDE)
 
-| Actor | Motivation | Capability |
-|-------|------------|------------|
-| External attacker | Financial gain, disruption | Medium-High |
-| Malicious insider | Data theft, sabotage | High |
-| Automated bot | Credential stuffing, spam | Low-Medium |
-| Competitor | Competitive intelligence | Medium |
+### Spoofing (S)
 
+#### S-1: Cross-Site Request Forgery (CSRF)
+- **Risk Level:** 🟢 Low
+- **Description:** Malicious sites could attempt to manipulate the application
+- **Attack Vector:** Embedded iframes or malicious links
+- **Current Mitigations:**
+  - No backend API to target
+  - localStorage is same-origin protected
+- **Recommendations:** None required for current architecture
 
-## STRIDE Analysis
+### Tampering (T)
 
-### Spoofing Identity
+#### T-1: localStorage Data Manipulation
+- **Risk Level:** 🟡 Medium
+- **Description:** Malicious browser extensions or XSS could modify stored tasting notes
+- **Attack Vector:** Browser devtools, malicious extensions, XSS vulnerabilities
+- **Impact:** Data integrity loss, corrupted tasting notes
+- **Current Mitigations:**
+  - Same-origin policy
+- **Recommendations:**
+  - Validate data structure when reading from localStorage
+  - Consider data integrity checksums for critical data
+  - Implement input validation in `JSON.parse()` calls
 
-| Threat | Risk | Mitigation |
-|--------|------|------------|
-| Attacker impersonates user | Medium | Implement strong authentication |
-| API key theft | High | Rotate keys, use short-lived tokens |
-| Session hijacking | Medium | Secure session management, HTTPS |
+#### T-2: Supply Chain Attacks via Dependencies
+- **Risk Level:** 🟠 High
+- **Description:** Compromised npm packages could inject malicious code
+- **Attack Vector:** Dependency confusion, typosquatting, compromised maintainer accounts
+- **Impact:** Full application compromise, data exfiltration
+- **Current Mitigations:**
+  - ✅ Dependabot configured
+  - ✅ package-lock.json present
+  - ✅ SAST scanning via CodeQL
+- **Recommendations:**
+  - Enable npm audit in CI pipeline
+  - Consider using npm provenance verification
+  - Pin dependency versions
 
-### Tampering
+### Repudiation (R)
 
-| Threat | Risk | Mitigation |
-|--------|------|------------|
-| Data modification in transit | High | TLS/HTTPS for all connections |
-| Database tampering | High | Access controls, audit logging |
-| Configuration tampering | Medium | Signed configs, integrity checks |
+#### R-1: No Audit Trail
+- **Risk Level:** 🟢 Low
+- **Description:** No logging of user actions or data modifications
+- **Attack Vector:** N/A (informational)
+- **Impact:** Cannot trace data changes or debug issues
+- **Current Mitigations:** None
+- **Recommendations:**
+  - For future backend integration, implement audit logging
+  - Consider optional browser console logging for debugging
 
-### Repudiation
+### Information Disclosure (I)
 
-| Threat | Risk | Mitigation |
-|--------|------|------------|
-| User denies actions | Medium | Comprehensive audit logging |
-| Log tampering | Medium | Immutable log storage |
+#### I-1: Sensitive Data in localStorage
+- **Risk Level:** 🟡 Medium
+- **Description:** localStorage data is accessible to any JavaScript on the same origin
+- **Attack Vector:** XSS vulnerabilities, malicious browser extensions
+- **Impact:** Exposure of user's tasting notes
+- **Current Mitigations:**
+  - Same-origin policy
+  - Content Security Policy (if configured)
+- **Recommendations:**
+  - Implement strict Content Security Policy
+  - Avoid storing sensitive personal data
+  - Document data retention policies
 
-### Information Disclosure
+#### I-2: Source Code Exposure
+- **Risk Level:** 🟢 Low (Intentional)
+- **Description:** Application source is publicly visible
+- **Attack Vector:** Direct repository access
+- **Impact:** Attackers can analyze code for vulnerabilities
+- **Current Mitigations:**
+  - ✅ Open source by design
+  - ✅ Security scanning in CI
+- **Recommendations:** Continue security scanning practices
 
-| Threat | Risk | Mitigation |
-|--------|------|------------|
-| Data breach | Critical | Encryption at rest and in transit |
-| Log exposure | Medium | Sanitize logs, access controls |
-| Error messages leak info | Low | Generic error messages |
+### Denial of Service (D)
 
-### Denial of Service
+#### D-1: localStorage Quota Exhaustion
+- **Risk Level:** 🟡 Medium
+- **Description:** Excessive data storage could exhaust browser storage quota
+- **Attack Vector:** Repeated form submissions, malicious scripts
+- **Impact:** Application becomes unusable, data loss
+- **Current Mitigations:** None
+- **Recommendations:**
+  - Implement storage quota monitoring
+  - Add data cleanup/export functionality
+  - Limit number of stored notes
 
-| Threat | Risk | Mitigation |
-|--------|------|------------|
-| Resource exhaustion | High | Rate limiting, quotas |
-| DDoS attacks | High | CDN, DDoS protection |
-| Algorithmic complexity | Medium | Input validation, timeouts |
+#### D-2: Client-Side Resource Exhaustion
+- **Risk Level:** 🟢 Low
+- **Description:** Large datasets could slow browser performance
+- **Attack Vector:** Accumulated data over time
+- **Impact:** Degraded user experience
+- **Current Mitigations:** None
+- **Recommendations:**
+  - Implement pagination for large note collections
+  - Consider lazy loading of note details
 
-### Elevation of Privilege
+### Elevation of Privilege (E)
 
-| Threat | Risk | Mitigation |
-|--------|------|------------|
-| Privilege escalation | Critical | Least privilege, RBAC |
-| SQL injection | Critical | Parameterized queries |
-| Command injection | Critical | Input sanitization |
+#### E-1: Cross-Site Scripting (XSS)
+- **Risk Level:** 🟡 Medium
+- **Description:** User input in tasting notes could contain malicious scripts
+- **Attack Vector:** Stored XSS via form inputs rendered in NoteDetail
+- **Impact:** Session hijacking, data theft, defacement
+- **Current Mitigations:**
+  - Vue.js automatic template escaping
+- **Recommendations:**
+  - Verify v-html is not used with user data
+  - Implement Content Security Policy
+  - Sanitize rich text if supported in future
 
+## Security Controls Matrix
 
-## Attack Vectors
+| Control | Status | Notes |
+|---------|--------|-------|
+| HTTPS | ✅ | GitHub Pages enforces HTTPS |
+| Content Security Policy | ⚠️ | Verify CSP headers |
+| Input Validation | ⚠️ | Verify form validation |
+| Output Encoding | ✅ | Vue.js auto-escaping |
+| Dependency Scanning | ✅ | Dependabot configured |
+| SAST | ✅ | CodeQL workflow present |
+| SCA | ✅ | Dependency review configured |
 
-### Entry Points
+## Recommendations Summary
 
-1. **Public API** - REST endpoints exposed to internet
-2. **Web UI** - User-facing web application
-3. **Admin Interface** - Administrative console
-4. **CI/CD Pipeline** - Build and deployment system
+### Immediate Actions (High Priority)
 
-### Attack Scenarios
+1. **Verify dependency security**
+   - Run `npm audit` regularly
+   - Review Dependabot alerts promptly
+   - Consider npm provenance verification
 
-#### Scenario 1: [Name]
+### Short-term Actions (Medium Priority)
 
-- **Attacker**: External
-- **Vector**: [Entry point]
-- **Goal**: [What they want to achieve]
-- **Steps**:
-  1. [Step 1]
-  2. [Step 2]
-- **Impact**: [Potential damage]
-- **Likelihood**: [Low/Medium/High]
-- **Mitigation**: [Controls in place]
+2. **Implement Content Security Policy**
+   - Add CSP headers via GitHub Pages `_headers` file
+   - Restrict script sources to 'self'
 
-## Security Controls
+3. **Add localStorage validation**
+   - Validate data structure on read
+   - Handle corrupted data gracefully
+   - Implement storage quota monitoring
 
-### Implemented Controls
+4. **Input validation hardening**
+   - Verify all form inputs are validated
+   - Ensure no v-html with user data
 
-| Control | Type | Protects Against |
-|---------|------|-----------------|
-| TLS 1.3 | Preventive | Information disclosure |
-| WAF | Detective/Preventive | Common attacks |
-| MFA | Preventive | Credential compromise |
-| SAST/DAST | Detective | Code vulnerabilities |
+### Long-term Considerations
 
-### Recommended Controls
+5. **Data management features**
+   - Export/backup functionality
+   - Data cleanup tools
+   - Pagination for scalability
 
-| Control | Priority | Status |
-|---------|----------|--------|
-| [Control] | High | Planned |
+## Methodology
 
-## Risk Assessment
+This threat model was created using the STRIDE methodology:
 
-| Risk | Likelihood | Impact | Overall | Status |
-|------|------------|--------|---------|--------|
-| Data breach | Medium | Critical | High | Mitigated |
-| Service outage | Low | High | Medium | Accepted |
+- **S**poofing - Identity verification threats
+- **T**ampering - Data integrity threats
+- **R**epudiation - Audit and accountability threats
+- **I**nformation Disclosure - Confidentiality threats
+- **D**enial of Service - Availability threats
+- **E**levation of Privilege - Authorization threats
+
+### Scope
+
+- Client-side Vue.js application
+- Browser localStorage persistence
+- Static hosting on GitHub Pages
+- No backend services in scope
+
+### Limitations
+
+- Static analysis only - runtime behavior not analyzed
+- No penetration testing performed
+- Business context requires human review
+- This is not a substitute for professional security assessment
 
 ## Review Schedule
 
-- **Full review**: Annually
-- **Updates**: After significant changes
-- **Incident-triggered**: After security incidents
+This threat model should be reviewed:
+- Quarterly, or
+- When significant architectural changes occur
+- When new features are added
+- After security incidents
 
 ## References
 
-- [OWASP Threat Modeling](https://owasp.org/www-community/Threat_Modeling)
-- [Microsoft STRIDE](https://docs.microsoft.com/en-us/azure/security/develop/threat-modeling-tool-threats)
-- [SECURITY.md](../SECURITY.md)
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
+- [OWASP ASVS](https://owasp.org/www-project-application-security-verification-standard/)
+- [Vue.js Security Best Practices](https://vuejs.org/guide/best-practices/security.html)
+- [GitHub Pages Security](https://docs.github.com/en/pages/getting-started-with-github-pages/securing-your-github-pages-site-with-https)
