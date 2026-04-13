@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository (if needed)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Fetch and verify default branch ruleset
         uses: actions/github-script@v9
