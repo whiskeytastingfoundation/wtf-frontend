@@ -235,7 +235,7 @@ jobs:
             console.log(`Created check run with ID ${check.data.id}`);
 
       - name: Upload summary report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v7
         with:
           name: osps-summary-report
           path: |
@@ -269,7 +269,7 @@ jobs:
         shell: bash
 
       - name: Upload summary attestation
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v7
         with:
           name: osps-summary-attestation
           path: osps-summary-attestation.json
