@@ -35,14 +35,14 @@ jobs:
         shell: bash
 
       - name: Download AC attestations
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: osps-ac-attestations
           path: attestations/ac
         continue-on-error: true
 
       - name: Download VM attestations
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: osps-vm-attestations
           path: attestations/vm
